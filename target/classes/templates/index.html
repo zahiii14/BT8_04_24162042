@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý RESTful API & AJAX - Category & Product</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/css/styles.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Header Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand" href="#"><i class="fa-solid fa-store me-2"></i> RESTful API & AJAX CRUD Manager</a>
+            <span class="navbar-text text-white-50 small">
+                Spring Boot 3 + Spring Data JPA + AJAX Pagination
+            </span>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+
+        <!-- Global Toast Notification Container -->
+        <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;"></div>
+
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="category-tab" data-bs-toggle="tab" data-bs-target="#category-pane" type="button" role="tab" aria-controls="category-pane" aria-selected="true">
+                    <i class="fa-solid fa-list me-2"></i> Quản Lý Danh Mục (Category)
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="product-tab" data-bs-toggle="tab" data-bs-target="#product-pane" type="button" role="tab" aria-controls="product-pane" aria-selected="false">
+                    <i class="fa-solid fa-box me-2"></i> Quản Lý Sản Phẩm (Product)
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabContent">
+
+            <!-- TAB 1: CATEGORY MANAGEMENT -->
+            <div class="tab-pane fade show active" id="category-pane" role="tabpanel" aria-labelledby="category-tab">
+                <div class="card">
+                    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-folder-tree text-primary fs-5"></i>
+                            <h5 class="mb-0">Danh Sách Danh Mục</h5>
+                        </div>
+                        <button class="btn btn-success" onclick="openAddCategoryModal()">
+                            <i class="fa-solid fa-plus me-1"></i> Thêm Danh Mục Mới
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Search & Filter Bar -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                    <input type="text" id="catSearchName" class="form-control" placeholder="Tìm kiếm theo tên danh mục..." onkeyup="onCategorySearchKeyUp(event)">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="loadCategoryData(0)">Tìm kiếm</button>
+                                    <button class="btn btn-outline-danger" type="button" onclick="clearCategorySearch()"><i class="fa-solid fa-xmark"></i></button>
+                                </div>
+                            </div>
+                            <div class="col-md-3 ms-auto">
+                                <div class="d-flex align-items-center justify-content-end gap-2">
+                                    <label class="form-label mb-0 text-nowrap small text-muted">Hiển thị:</label>
+                                    <select id="catPageSize" class="form-select form-select-sm w-auto" onchange="loadCategoryData(0)">
+                                        <option value="3">3 mục</option>
+                                        <option value="5" selected>5 mục</option>
+                                        <option value="10">10 mục</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Data Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover table-bordered align-middle">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center" style="width: 70px;">ID</th>
+                                        <th class="text-center" style="width: 100px;">Biểu tượng</th>
+                                        <th>Tên Danh Mục</th>
+                                        <th class="text-center" style="width: 150px;">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="categoryTableBody">
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">
+                                            <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Footer -->
+                        <div class="d-flex flex-wrap align-items-center justify-content-between mt-3 gap-2">
+                            <div id="catPaginationInfo" class="small text-muted">Hiển thị 0 - 0 của 0 danh mục</div>
+                            <nav>
+                                <ul id="catPaginationNav" class="pagination pagination-sm mb-0"></ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- TAB 2: PRODUCT MANAGEMENT -->
+            <div class="tab-pane fade" id="product-pane" role="tabpanel" aria-labelledby="product-tab">
+                <div class="card">
+                    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-boxes-stacked text-primary fs-5"></i>
+                            <h5 class="mb-0">Danh Sách Sản Phẩm</h5>
+                        </div>
+                        <button class="btn btn-success" onclick="openAddProductModal()">
+                            <i class="fa-solid fa-plus me-1"></i> Thêm Sản Phẩm Mới
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Search & Filter Bar -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-5">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                    <input type="text" id="prodSearchName" class="form-control" placeholder="Tìm kiếm theo tên sản phẩm..." onkeyup="onProductSearchKeyUp(event)">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="loadProductData(0)">Tìm kiếm</button>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <select id="prodFilterCategory" class="form-select" onchange="loadProductData(0)">
+                                    <option value="">-- Tất cả Danh mục --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <button class="btn btn-outline-danger me-2" type="button" onclick="clearProductSearch()"><i class="fa-solid fa-xmark"></i> Xóa lọc</button>
+                                <select id="prodPageSize" class="form-select form-select-sm d-inline-block w-auto" onchange="loadProductData(0)">
+                                    <option value="3">3 SP</option>
+                                    <option value="5" selected>5 SP</option>
+                                    <option value="10">10 SP</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Data Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover table-bordered align-middle">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center" style="width: 60px;">ID</th>
+                                        <th class="text-center" style="width: 90px;">Hình ảnh</th>
+                                        <th>Tên Sản Phẩm</th>
+                                        <th class="text-end" style="width: 130px;">Đơn Giá (VNĐ)</th>
+                                        <th class="text-center" style="width: 90px;">Giảm giá</th>
+                                        <th class="text-center" style="width: 90px;">Số lượng</th>
+                                        <th>Danh Mục</th>
+                                        <th class="text-center" style="width: 100px;">Trạng thái</th>
+                                        <th class="text-center" style="width: 140px;">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productTableBody">
+                                    <tr>
+                                        <td colspan="9" class="text-center py-4 text-muted">
+                                            <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Footer -->
+                        <div class="d-flex flex-wrap align-items-center justify-content-between mt-3 gap-2">
+                            <div id="prodPaginationInfo" class="small text-muted">Hiển thị 0 - 0 của 0 sản phẩm</div>
+                            <nav>
+                                <ul id="prodPaginationNav" class="pagination pagination-sm mb-0"></ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL CATEGORY (Add / Edit) -->
+    <div class="modal fade" id="categoryModal" tabindex="-1" aria-labelledby="categoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="categoryForm" enctype="multipart/form-data">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="categoryModalLabel">Thêm Mới Danh Mục</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="catId" name="categoryId">
+                        
+                        <div class="mb-3">
+                            <label for="catNameInput" class="form-label required">Tên Danh Mục <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="catNameInput" name="categoryName" required placeholder="Nhập tên danh mục...">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="catIconInput" class="form-label">Biểu tượng (Icon Image)</label>
+                            <input type="file" class="form-control" id="catIconInput" name="icon" accept="image/*" onchange="previewCatIcon(this)">
+                            <div id="catIconCurrentContainer" class="mt-2 d-none">
+                                <span class="small text-muted d-block">Icon hiện tại / Xem trước:</span>
+                                <img id="catIconPreview" src="" class="img-thumbnail mt-1" style="max-height: 80px;" alt="Icon preview">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary" id="btnSaveCategory">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Lưu Thông Tin
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PRODUCT (Add / Edit) -->
+    <div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form id="productForm" enctype="multipart/form-data">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="productModalLabel">Thêm Mới Sản Phẩm</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="prodId" name="productId">
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                                <label for="prodNameInput" class="form-label">Tên Sản Phẩm <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="prodNameInput" name="productName" required placeholder="Nhập tên sản phẩm...">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="prodCategorySelect" class="form-label">Danh Mục <span class="text-danger">*</span></label>
+                                <select class="form-select" id="prodCategorySelect" name="categoryId" required>
+                                    <option value="">-- Chọn Danh Mục --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label for="prodUnitPriceInput" class="form-label">Đơn Giá (VNĐ) <span class="text-danger">*</span></label>
+                                <input type="number" step="1000" min="0" class="form-control" id="prodUnitPriceInput" name="unitPrice" required placeholder="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="prodDiscountInput" class="form-label">Giảm Giá (%)</label>
+                                <input type="number" step="0.5" min="0" max="100" class="form-control" id="prodDiscountInput" name="discount" value="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="prodQuantityInput" class="form-label">Số Lượng Kho <span class="text-danger">*</span></label>
+                                <input type="number" min="0" class="form-control" id="prodQuantityInput" name="quantity" required value="1">
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label for="prodStatusSelect" class="form-label">Trạng Thái</label>
+                                <select class="form-select" id="prodStatusSelect" name="status">
+                                    <option value="1" selected>Đang bán (Active)</option>
+                                    <option value="0">Ngừng bán (Inactive)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="prodImageFileInput" class="form-label">Hình Ảnh Sản Phẩm</label>
+                                <input type="file" class="form-control" id="prodImageFileInput" name="imageFile" accept="image/*" onchange="previewProdImage(this)">
+                                <div id="prodImageCurrentContainer" class="mt-2 d-none">
+                                    <span class="small text-muted d-block">Ảnh hiện tại / Xem trước:</span>
+                                    <img id="prodImagePreview" src="" class="img-thumbnail mt-1" style="max-height: 90px;" alt="Product preview">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="prodDescInput" class="form-label">Mô Tả Sản Phẩm</label>
+                            <textarea class="form-control" id="prodDescInput" name="description" rows="3" placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary" id="btnSaveProduct">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Lưu Sản Phẩm
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- jQuery 3.7.1 -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 for notifications & confirmation dialogs -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Custom Application AJAX Script -->
+    <script src="/js/app.js"></script>
+</body>
+</html>
