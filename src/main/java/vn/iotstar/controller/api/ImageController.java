@@ -55,4 +55,15 @@ public class ImageController {
                     .body(resource);
         }
     }
+
+    @org.springframework.web.bind.annotation.PostMapping("/upload")
+    public ResponseEntity<vn.iotstar.model.Response> uploadImage(@org.springframework.web.bind.annotation.RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(new vn.iotstar.model.Response(false, "File rỗng", null));
+        }
+        String uuid = java.util.UUID.randomUUID().toString();
+        String storeFilename = storageService.getStorageFilename(file, uuid);
+        storageService.store(file, storeFilename);
+        return ResponseEntity.ok(new vn.iotstar.model.Response(true, "Tải ảnh thành công", storeFilename));
+    }
 }

@@ -21,6 +21,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     Page<Product> findByCategory_CategoryId(Long categoryId, Pageable pageable);
 
+    List<Product> findByCategory_CategoryId(Long categoryId);
+
+    List<Product> findByOrderByUnitPriceAsc();
+
     Optional<Product> findByProductName(String name);
 
     Optional<Product> findByCreateDate(Date createDate);

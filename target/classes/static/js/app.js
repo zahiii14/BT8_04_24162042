@@ -6,12 +6,18 @@ const DEFAULT_SVG_PLACEHOLDER = "data:image/svg+xml;utf8,<svg xmlns='http://www.
 
 // Document Ready Setup
 $(document).ready(function () {
-    // Initial data load
+    // Initial data load via GraphQL
+    loadHomeProductsSortedByPrice();
+    loadCategoryDropdowns();
     loadCategoryData(0);
     loadProductData(0);
-    loadCategoryDropdowns();
 
-    // Event listener for tab switch to reload dropdowns if categories change
+    // Tab Event Listeners
+    $('#home-tab').on('shown.bs.tab', function () {
+        loadHomeProductsSortedByPrice();
+        loadCategoryDropdowns();
+    });
+
     $('#product-tab').on('shown.bs.tab', function () {
         loadCategoryDropdowns();
     });
@@ -29,8 +35,47 @@ $(document).ready(function () {
 });
 
 /* ==========================================================================
-   HELPER UTILITIES
+   HELPER UTILITIES & GRAPHQL FETCH FUNCTION
    ========================================================================== */
+
+function executeGraphQL(query, variables = {}) {
+    return $.ajax({
+        url: '/graphql',
+        type: 'POST',
+        contentType: 'application/json',
+        dataType: 'json',
+        data: JSON.stringify({
+            query: query,
+            variables: variables
+        })
+    });
+}
+
+function uploadImageFile(fileInputId) {
+    const fileInput = document.getElementById(fileInputId);
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        return Promise.resolve(null);
+    }
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    return $.ajax({
+        url: '/api/images/upload',
+        type: 'POST',
+        data: formData,
+        contentType: false,
+        processData: false,
+        dataType: 'json'
+    }).then(res => {
+        if (res.status && res.body) {
+            return res.body;
+        }
+        return null;
+    }).catch(err => {
+        console.error("Lỗi upload file:", err);
+        return null;
+    });
+}
 
 function formatCurrency(amount) {
     if (!amount) return '0 ₫';
@@ -64,44 +109,208 @@ function getImageUrl(filename) {
 
 
 /* ==========================================================================
-   CATEGORY AJAX CRUD & PAGINATION
+   TRANG CHỦ (HOME PAGE) GRAPHQL PRODUCT VIEWS
    ========================================================================== */
+
+// 1. Hiển thị tất cả product có price từ thấp đến cao
+function loadHomeProductsSortedByPrice() {
+    $('#homePriceSortedContainer').html(`
+        <div class="col-12 text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải danh sách sản phẩm giá tăng dần (GraphQL)...
+        </div>
+    `);
+
+    const query = `
+        query {
+            productsSortedByPriceAsc {
+                productId
+                productName
+                unitPrice
+                quantity
+                discount
+                images
+                description
+                status
+                category {
+                    categoryId
+                    categoryName
+                }
+            }
+        }
+    `;
+
+    executeGraphQL(query).done(function (res) {
+        if (res.data && res.data.productsSortedByPriceAsc) {
+            renderHomeProductGrid('#homePriceSortedContainer', res.data.productsSortedByPriceAsc);
+        } else {
+            $('#homePriceSortedContainer').html('<div class="col-12 text-center text-muted py-4">Không có dữ liệu sản phẩm</div>');
+        }
+    }).fail(function (err) {
+        console.error(err);
+        $('#homePriceSortedContainer').html('<div class="col-12 text-center text-danger py-4">Lỗi kết nối GraphQL API!</div>');
+    });
+}
+
+// 2. Lấy tất cả product của 01 category
+function onHomeCategoryChanged() {
+    const categoryId = $('#homeCategorySelect').val();
+    if (!categoryId) {
+        $('#homeCategoryProductsContainer').html(`
+            <div class="col-12 text-center py-4 text-muted">
+                <i class="fa-solid fa-hand-pointer me-2"></i> Vui lòng chọn 1 danh mục ở trên để hiển thị sản phẩm.
+            </div>
+        `);
+        return;
+    }
+
+    $('#homeCategoryProductsContainer').html(`
+        <div class="col-12 text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm text-success me-2"></div> Đang tải sản phẩm của danh mục (GraphQL)...
+        </div>
+    `);
+
+    const query = `
+        query GetProductsByCategory($catId: ID!) {
+            productsByCategory(categoryId: $catId) {
+                productId
+                productName
+                unitPrice
+                quantity
+                discount
+                images
+                description
+                status
+                category {
+                    categoryId
+                    categoryName
+                }
+            }
+        }
+    `;
+
+    executeGraphQL(query, { catId: categoryId }).done(function (res) {
+        if (res.data && res.data.productsByCategory) {
+            renderHomeProductGrid('#homeCategoryProductsContainer', res.data.productsByCategory);
+        } else {
+            $('#homeCategoryProductsContainer').html('<div class="col-12 text-center text-muted py-4">Không có sản phẩm nào thuộc danh mục này</div>');
+        }
+    }).fail(function (err) {
+        console.error(err);
+        $('#homeCategoryProductsContainer').html('<div class="col-12 text-center text-danger py-4">Lỗi kết nối GraphQL API!</div>');
+    });
+}
+
+function renderHomeProductGrid(containerId, products) {
+    if (!products || products.length === 0) {
+        $(containerId).html('<div class="col-12 text-center text-muted py-4"><i class="fa-solid fa-box-open me-2"></i>Không tìm thấy sản phẩm nào</div>');
+        return;
+    }
+
+    let html = '';
+    products.forEach(p => {
+        const imgSrc = getImageUrl(p.images);
+        const catName = p.category ? p.category.categoryName : 'Khác';
+        const discountBadge = p.discount > 0 ? `<span class="badge bg-danger position-absolute top-0 start-0 m-2">-${p.discount}%</span>` : '';
+
+        html += `
+            <div class="col">
+                <div class="card h-100 shadow-sm border-0 position-relative">
+                    ${discountBadge}
+                    <div class="text-center p-3 bg-light rounded-top">
+                        <img src="${imgSrc}" class="card-img-top" alt="${p.productName}" style="max-height: 140px; object-fit: contain;" onError="this.src='${DEFAULT_SVG_PLACEHOLDER}'">
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <span class="badge bg-info text-dark w-auto align-self-start mb-2">${catName}</span>
+                        <h6 class="card-title fw-bold text-dark mb-1 text-truncate" title="${p.productName}">${p.productName}</h6>
+                        <p class="card-text small text-muted text-truncate mb-2" style="max-height: 40px;">${p.description || ''}</p>
+                        <div class="mt-auto d-flex align-items-center justify-content-between">
+                            <span class="fw-bold text-success fs-6">${formatCurrency(p.unitPrice)}</span>
+                            <span class="small text-muted">Kho: ${p.quantity}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    $(containerId).html(html);
+}
+
+
+/* ==========================================================================
+   CATEGORY GRAPHQL CRUD & PAGINATION
+   ========================================================================== */
+
+function loadCategoryDropdowns() {
+    const query = `
+        query {
+            allCategories {
+                categoryId
+                categoryName
+            }
+        }
+    `;
+
+    executeGraphQL(query).done(function (res) {
+        if (res.data && res.data.allCategories) {
+            let filterOptions = '<option value="">-- Tất cả Danh mục --</option>';
+            let selectOptions = '<option value="">-- Chọn Danh Mục --</option>';
+
+            res.data.allCategories.forEach(cat => {
+                filterOptions += `<option value="${cat.categoryId}">${cat.categoryName}</option>`;
+                selectOptions += `<option value="${cat.categoryId}">${cat.categoryName}</option>`;
+            });
+
+            const currentHomeFilter = $('#homeCategorySelect').val();
+            const currentProdFilter = $('#prodFilterCategory').val();
+
+            $('#homeCategorySelect').html(selectOptions).val(currentHomeFilter);
+            $('#prodFilterCategory').html(filterOptions).val(currentProdFilter);
+            $('#prodCategorySelect').html(selectOptions);
+        }
+    });
+}
 
 function loadCategoryData(page = 0) {
     currentCatPage = page;
     const searchName = $('#catSearchName').val().trim();
-    const pageSize = $('#catPageSize').val();
+    const pageSize = parseInt($('#catPageSize').val(), 10);
 
     $('#categoryTableBody').html(`
         <tr>
             <td colspan="4" class="text-center py-4 text-muted">
-                <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu danh mục...
+                <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu danh mục (GraphQL)...
             </td>
         </tr>
     `);
 
-    $.ajax({
-        url: '/api/category/search',
-        type: 'GET',
-        data: {
-            name: searchName,
-            page: page,
-            size: pageSize,
-            sort: 'categoryId,asc'
-        },
-        dataType: 'json',
-        success: function (res) {
-            if (res.status && res.body) {
-                renderCategoryTable(res.body);
-                renderCategoryPagination(res.body);
-            } else {
-                $('#categoryTableBody').html('<tr><td colspan="4" class="text-center text-muted py-4">Không tìm thấy dữ liệu!</td></tr>');
+    const query = `
+        query SearchCategories($name: String, $page: Int, $size: Int) {
+            searchCategories(name: $name, page: $page, size: $size) {
+                content {
+                    categoryId
+                    categoryName
+                    icon
+                }
+                totalPages
+                totalElements
+                number
+                size
+                first
+                last
             }
-        },
-        error: function (xhr) {
-            console.error(xhr);
-            $('#categoryTableBody').html('<tr><td colspan="4" class="text-center text-danger py-4">Lỗi tải dữ liệu từ API!</td></tr>');
         }
+    `;
+
+    executeGraphQL(query, { name: searchName, page: page, size: pageSize }).done(function (res) {
+        if (res.data && res.data.searchCategories) {
+            renderCategoryTable(res.data.searchCategories);
+            renderCategoryPagination(res.data.searchCategories);
+        } else {
+            $('#categoryTableBody').html('<tr><td colspan="4" class="text-center text-muted py-4">Không tìm thấy dữ liệu!</td></tr>');
+        }
+    }).fail(function (err) {
+        console.error(err);
+        $('#categoryTableBody').html('<tr><td colspan="4" class="text-center text-danger py-4">Lỗi tải dữ liệu từ GraphQL!</td></tr>');
     });
 }
 
@@ -148,7 +357,6 @@ function renderCategoryPagination(pageData) {
 
     let navHtml = '';
 
-    // First & Previous Buttons
     navHtml += `
         <li class="page-item ${currentPage === 0 ? 'disabled' : ''}">
             <a class="page-link" href="javascript:void(0)" onclick="loadCategoryData(0)">&laquo; Đầu</a>
@@ -158,7 +366,6 @@ function renderCategoryPagination(pageData) {
         </li>
     `;
 
-    // Page Number Buttons
     const maxVisiblePages = 5;
     let startPage = Math.max(0, currentPage - 2);
     let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
@@ -174,7 +381,6 @@ function renderCategoryPagination(pageData) {
         `;
     }
 
-    // Next & Last Buttons
     navHtml += `
         <li class="page-item ${currentPage >= totalPages - 1 || totalPages === 0 ? 'disabled' : ''}">
             <a class="page-link" href="javascript:void(0)" onclick="loadCategoryData(${currentPage + 1})">Sau</a>
@@ -207,32 +413,36 @@ function openAddCategoryModal() {
 }
 
 function editCategory(id) {
-    $.ajax({
-        url: '/api/category/' + id,
-        type: 'GET',
-        dataType: 'json',
-        success: function (res) {
-            if (res.status && res.body) {
-                const cat = res.body;
-                $('#catId').val(cat.categoryId);
-                $('#catNameInput').val(cat.categoryName);
-                
-                if (cat.icon) {
-                    $('#catIconPreview').attr('src', getImageUrl(cat.icon));
-                    $('#catIconCurrentContainer').removeClass('d-none');
-                } else {
-                    $('#catIconCurrentContainer').addClass('d-none');
-                }
-
-                $('#categoryModalLabel').text('Chỉnh Sửa Danh Mục: ' + cat.categoryName);
-                $('#categoryModal').modal('show');
-            } else {
-                showToast(res.message || 'Không tìm thấy dữ liệu', 'error');
+    const query = `
+        query GetCategory($id: ID!) {
+            categoryById(id: $id) {
+                categoryId
+                categoryName
+                icon
             }
-        },
-        error: function () {
-            showToast('Lỗi kết nối khi lấy thông tin danh mục!', 'error');
         }
+    `;
+
+    executeGraphQL(query, { id: id }).done(function (res) {
+        if (res.data && res.data.categoryById) {
+            const cat = res.data.categoryById;
+            $('#catId').val(cat.categoryId);
+            $('#catNameInput').val(cat.categoryName);
+            
+            if (cat.icon) {
+                $('#catIconPreview').attr('src', getImageUrl(cat.icon));
+                $('#catIconCurrentContainer').removeClass('d-none');
+            } else {
+                $('#catIconCurrentContainer').addClass('d-none');
+            }
+
+            $('#categoryModalLabel').text('Chỉnh Sửa Danh Mục: ' + cat.categoryName);
+            $('#categoryModal').modal('show');
+        } else {
+            showToast('Không tìm thấy danh mục!', 'error');
+        }
+    }).fail(function () {
+        showToast('Lỗi GraphQL khi lấy thông tin danh mục!', 'error');
     });
 }
 
@@ -247,53 +457,91 @@ function previewCatIcon(input) {
     }
 }
 
-function saveCategory() {
-    const formData = new FormData($('#categoryForm')[0]);
+async function saveCategory() {
     const catId = $('#catId').val();
-
-    let apiUrl = '/api/category/addCategory';
-    let httpMethod = 'POST';
-
-    if (catId && catId !== '') {
-        apiUrl = '/api/category/updateCategory';
-        httpMethod = 'PUT';
+    const catName = $('#catNameInput').val().trim();
+    if (!catName) {
+        showToast('Tên danh mục không được để trống!', 'error');
+        return;
     }
 
     $('#btnSaveCategory').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...');
 
-    $.ajax({
-        url: apiUrl,
-        type: httpMethod,
-        data: formData,
-        contentType: false,
-        processData: false,
-        dataType: 'json',
-        success: function (res) {
+    // Upload icon if file selected
+    let uploadedFilename = await uploadImageFile('catIconInput');
+
+    if (catId && catId !== '') {
+        // Update mutation
+        const mutation = `
+            mutation UpdateCategory($input: CategoryInput!) {
+                updateCategory(input: $input) {
+                    categoryId
+                    categoryName
+                    icon
+                }
+            }
+        `;
+        const variables = {
+            input: {
+                categoryId: catId,
+                categoryName: catName,
+                icon: uploadedFilename
+            }
+        };
+
+        executeGraphQL(mutation, variables).done(function (res) {
             $('#btnSaveCategory').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Thông Tin');
-            if (res.status) {
-                showToast(res.message || 'Thao tác thành công!', 'success');
+            if (res.data && res.data.updateCategory) {
+                showToast('Cập nhật danh mục thành công!', 'success');
                 $('#categoryModal').modal('hide');
                 loadCategoryData(currentCatPage);
                 loadCategoryDropdowns();
             } else {
-                showToast(res.message || 'Thao tác thất bại!', 'error');
+                showToast('Lỗi cập nhật danh mục!', 'error');
             }
-        },
-        error: function (xhr) {
+        }).fail(function () {
             $('#btnSaveCategory').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Thông Tin');
-            let errMsg = 'Có lỗi xảy ra khi lưu danh mục!';
-            if (xhr.responseJSON && xhr.responseJSON.message) {
-                errMsg = xhr.responseJSON.message;
+            showToast('Lỗi GraphQL Mutation!', 'error');
+        });
+    } else {
+        // Create mutation
+        const mutation = `
+            mutation CreateCategory($input: CategoryInput!) {
+                createCategory(input: $input) {
+                    categoryId
+                    categoryName
+                    icon
+                }
             }
-            showToast(errMsg, 'error');
-        }
-    });
+        `;
+        const variables = {
+            input: {
+                categoryName: catName,
+                icon: uploadedFilename
+            }
+        };
+
+        executeGraphQL(mutation, variables).done(function (res) {
+            $('#btnSaveCategory').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Thông Tin');
+            if (res.data && res.data.createCategory) {
+                showToast('Thêm danh mục thành công!', 'success');
+                $('#categoryModal').modal('hide');
+                loadCategoryData(currentCatPage);
+                loadCategoryDropdowns();
+            } else {
+                showToast('Lỗi thêm danh mục!', 'error');
+            }
+        }).fail(function () {
+            $('#btnSaveCategory').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Thông Tin');
+            showToast('Lỗi GraphQL Mutation!', 'error');
+        });
+    }
 }
 
 function deleteCategory(id, name) {
     Swal.fire({
-        title: 'Xác nhận xóa?',
-        text: `Bạn có chắc chắn muốn xóa danh mục "${name}"? Thao tác này sẽ xóa luôn các sản phẩm thuộc danh mục!`,
+        title: 'Xác nhận xóa (GraphQL)?',
+        text: `Bạn có chắc chắn muốn xóa danh mục "${name}"?`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
@@ -302,22 +550,22 @@ function deleteCategory(id, name) {
         cancelButtonText: 'Hủy bỏ'
     }).then((result) => {
         if (result.isConfirmed) {
-            $.ajax({
-                url: '/api/category/deleteCategory/' + id,
-                type: 'DELETE',
-                dataType: 'json',
-                success: function (res) {
-                    if (res.status) {
-                        showToast(res.message || 'Xóa danh mục thành công!', 'success');
-                        loadCategoryData(currentCatPage);
-                        loadCategoryDropdowns();
-                    } else {
-                        showToast(res.message || 'Xóa danh mục thất bại!', 'error');
-                    }
-                },
-                error: function () {
-                    showToast('Lỗi hệ thống khi xóa danh mục!', 'error');
+            const mutation = `
+                mutation DeleteCategory($id: ID!) {
+                    deleteCategory(id: $id)
                 }
+            `;
+
+            executeGraphQL(mutation, { id: id }).done(function (res) {
+                if (res.data && res.data.deleteCategory) {
+                    showToast('Xóa danh mục thành công!', 'success');
+                    loadCategoryData(currentCatPage);
+                    loadCategoryDropdowns();
+                } else {
+                    showToast('Xóa danh mục thất bại!', 'error');
+                }
+            }).fail(function () {
+                showToast('Lỗi hệ thống khi xóa danh mục!', 'error');
             });
         }
     });
@@ -325,69 +573,67 @@ function deleteCategory(id, name) {
 
 
 /* ==========================================================================
-   PRODUCT AJAX CRUD & PAGINATION
+   PRODUCT GRAPHQL CRUD & PAGINATION
    ========================================================================== */
-
-function loadCategoryDropdowns() {
-    $.ajax({
-        url: '/api/category/all',
-        type: 'GET',
-        dataType: 'json',
-        success: function (res) {
-            if (res.status && res.body) {
-                let filterOptions = '<option value="">-- Tất cả Danh mục --</option>';
-                let selectOptions = '<option value="">-- Chọn Danh Mục --</option>';
-
-                res.body.forEach(cat => {
-                    filterOptions += `<option value="${cat.categoryId}">${cat.categoryName}</option>`;
-                    selectOptions += `<option value="${cat.categoryId}">${cat.categoryName}</option>`;
-                });
-
-                const currentFilter = $('#prodFilterCategory').val();
-                $('#prodFilterCategory').html(filterOptions).val(currentFilter);
-                $('#prodCategorySelect').html(selectOptions);
-            }
-        }
-    });
-}
 
 function loadProductData(page = 0) {
     currentProdPage = page;
     const searchName = $('#prodSearchName').val().trim();
     const categoryId = $('#prodFilterCategory').val();
-    const pageSize = $('#prodPageSize').val();
+    const pageSize = parseInt($('#prodPageSize').val(), 10);
 
     $('#productTableBody').html(`
         <tr>
             <td colspan="9" class="text-center py-4 text-muted">
-                <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu sản phẩm...
+                <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu sản phẩm (GraphQL)...
             </td>
         </tr>
     `);
 
-    $.ajax({
-        url: '/api/product/search',
-        type: 'GET',
-        data: {
-            name: searchName,
-            categoryId: categoryId,
-            page: page,
-            size: pageSize,
-            sort: 'productId,desc'
-        },
-        dataType: 'json',
-        success: function (res) {
-            if (res.status && res.body) {
-                renderProductTable(res.body);
-                renderProductPagination(res.body);
-            } else {
-                $('#productTableBody').html('<tr><td colspan="9" class="text-center text-muted py-4">Không tìm thấy dữ liệu!</td></tr>');
+    const query = `
+        query SearchProducts($name: String, $categoryId: ID, $page: Int, $size: Int) {
+            searchProducts(name: $name, categoryId: $categoryId, page: $page, size: $size) {
+                content {
+                    productId
+                    productName
+                    quantity
+                    unitPrice
+                    images
+                    description
+                    discount
+                    status
+                    category {
+                        categoryId
+                        categoryName
+                    }
+                }
+                totalPages
+                totalElements
+                number
+                size
+                first
+                last
             }
-        },
-        error: function (xhr) {
-            console.error(xhr);
-            $('#productTableBody').html('<tr><td colspan="9" class="text-center text-danger py-4">Lỗi tải dữ liệu sản phẩm!</td></tr>');
         }
+    `;
+
+    const variables = {
+        name: searchName,
+        categoryId: categoryId ? categoryId : null,
+        page: page,
+        size: pageSize
+    };
+
+    executeGraphQL(query, variables).done(function (res) {
+        if (res.data && res.data.searchProducts) {
+            renderProductTable(res.data.searchProducts);
+            renderProductPagination(res.data.searchProducts);
+        } else {
+            $('#productTableBody').html('<tr><td colspan="9" class="text-center text-muted py-4">Không tìm thấy dữ liệu!</td></tr>');
+        }
+    }).fail(function (err) {
+        console.error(err);
+        $('#productTableBody').html('<tr><td colspan="9" class="text-center text-danger py-4">Lỗi tải dữ liệu từ GraphQL!</td></tr>');
     });
 }
 
@@ -451,7 +697,6 @@ function renderProductPagination(pageData) {
 
     let navHtml = '';
 
-    // First & Previous Buttons
     navHtml += `
         <li class="page-item ${currentPage === 0 ? 'disabled' : ''}">
             <a class="page-link" href="javascript:void(0)" onclick="loadProductData(0)">&laquo; Đầu</a>
@@ -461,7 +706,6 @@ function renderProductPagination(pageData) {
         </li>
     `;
 
-    // Page Numbers
     const maxVisiblePages = 5;
     let startPage = Math.max(0, currentPage - 2);
     let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
@@ -477,7 +721,6 @@ function renderProductPagination(pageData) {
         `;
     }
 
-    // Next & Last Buttons
     navHtml += `
         <li class="page-item ${currentPage >= totalPages - 1 || totalPages === 0 ? 'disabled' : ''}">
             <a class="page-link" href="javascript:void(0)" onclick="loadProductData(${currentPage + 1})">Sau</a>
@@ -511,41 +754,53 @@ function openAddProductModal() {
 }
 
 function editProduct(id) {
-    $.ajax({
-        url: '/api/product/' + id,
-        type: 'GET',
-        dataType: 'json',
-        success: function (res) {
-            if (res.status && res.body) {
-                const p = res.body;
-                $('#prodId').val(p.productId);
-                $('#prodNameInput').val(p.productName);
-                $('#prodUnitPriceInput').val(p.unitPrice);
-                $('#prodDiscountInput').val(p.discount);
-                $('#prodQuantityInput').val(p.quantity);
-                $('#prodStatusSelect').val(p.status);
-                $('#prodDescInput').val(p.description);
-
-                if (p.category) {
-                    $('#prodCategorySelect').val(p.category.categoryId);
+    const query = `
+        query GetProduct($id: ID!) {
+            productById(id: $id) {
+                productId
+                productName
+                quantity
+                unitPrice
+                images
+                description
+                discount
+                status
+                category {
+                    categoryId
                 }
-
-                if (p.images) {
-                    $('#prodImagePreview').attr('src', getImageUrl(p.images));
-                    $('#prodImageCurrentContainer').removeClass('d-none');
-                } else {
-                    $('#prodImageCurrentContainer').addClass('d-none');
-                }
-
-                $('#productModalLabel').text('Chỉnh Sửa Sản Phẩm: ' + p.productName);
-                $('#productModal').modal('show');
-            } else {
-                showToast(res.message || 'Không tìm thấy thông tin sản phẩm', 'error');
             }
-        },
-        error: function () {
-            showToast('Lỗi lấy dữ liệu sản phẩm!', 'error');
         }
+    `;
+
+    executeGraphQL(query, { id: id }).done(function (res) {
+        if (res.data && res.data.productById) {
+            const p = res.data.productById;
+            $('#prodId').val(p.productId);
+            $('#prodNameInput').val(p.productName);
+            $('#prodUnitPriceInput').val(p.unitPrice);
+            $('#prodDiscountInput').val(p.discount);
+            $('#prodQuantityInput').val(p.quantity);
+            $('#prodStatusSelect').val(p.status);
+            $('#prodDescInput').val(p.description);
+
+            if (p.category) {
+                $('#prodCategorySelect').val(p.category.categoryId);
+            }
+
+            if (p.images) {
+                $('#prodImagePreview').attr('src', getImageUrl(p.images));
+                $('#prodImageCurrentContainer').removeClass('d-none');
+            } else {
+                $('#prodImageCurrentContainer').addClass('d-none');
+            }
+
+            $('#productModalLabel').text('Chỉnh Sửa Sản Phẩm: ' + p.productName);
+            $('#productModal').modal('show');
+        } else {
+            showToast('Không tìm thấy thông tin sản phẩm!', 'error');
+        }
+    }).fail(function () {
+        showToast('Lỗi GraphQL khi lấy sản phẩm!', 'error');
     });
 }
 
@@ -560,51 +815,105 @@ function previewProdImage(input) {
     }
 }
 
-function saveProduct() {
-    const formData = new FormData($('#productForm')[0]);
+async function saveProduct() {
     const prodId = $('#prodId').val();
+    const productName = $('#prodNameInput').val().trim();
+    const categoryId = $('#prodCategorySelect').val();
+    const unitPrice = parseFloat($('#prodUnitPriceInput').val() || 0);
+    const quantity = parseInt($('#prodQuantityInput').val() || 0, 10);
+    const discount = parseFloat($('#prodDiscountInput').val() || 0);
+    const status = parseInt($('#prodStatusSelect').val() || 1, 10);
+    const description = $('#prodDescInput').val();
 
-    let apiUrl = '/api/product/addProduct';
-    let httpMethod = 'POST';
-
-    if (prodId && prodId !== '') {
-        apiUrl = '/api/product/updateProduct';
-        httpMethod = 'PUT';
+    if (!productName || !categoryId) {
+        showToast('Vui lòng nhập tên sản phẩm và chọn danh mục!', 'error');
+        return;
     }
 
     $('#btnSaveProduct').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...');
 
-    $.ajax({
-        url: apiUrl,
-        type: httpMethod,
-        data: formData,
-        contentType: false,
-        processData: false,
-        dataType: 'json',
-        success: function (res) {
+    // Upload image if file selected
+    let uploadedImage = await uploadImageFile('prodImageFileInput');
+
+    if (prodId && prodId !== '') {
+        const mutation = `
+            mutation UpdateProduct($input: ProductInput!) {
+                updateProduct(input: $input) {
+                    productId
+                    productName
+                    images
+                }
+            }
+        `;
+        const variables = {
+            input: {
+                productId: prodId,
+                productName: productName,
+                quantity: quantity,
+                unitPrice: unitPrice,
+                images: uploadedImage,
+                description: description,
+                discount: discount,
+                status: status,
+                categoryId: categoryId
+            }
+        };
+
+        executeGraphQL(mutation, variables).done(function (res) {
             $('#btnSaveProduct').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Sản Phẩm');
-            if (res.status) {
-                showToast(res.message || 'Thao tác thành công!', 'success');
+            if (res.data && res.data.updateProduct) {
+                showToast('Cập nhật sản phẩm thành công!', 'success');
                 $('#productModal').modal('hide');
                 loadProductData(currentProdPage);
             } else {
-                showToast(res.message || 'Thao tác thất bại!', 'error');
+                showToast('Lỗi cập nhật sản phẩm!', 'error');
             }
-        },
-        error: function (xhr) {
+        }).fail(function () {
             $('#btnSaveProduct').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Sản Phẩm');
-            let errMsg = 'Có lỗi xảy ra khi lưu sản phẩm!';
-            if (xhr.responseJSON && xhr.responseJSON.message) {
-                errMsg = xhr.responseJSON.message;
+            showToast('Lỗi GraphQL Mutation!', 'error');
+        });
+    } else {
+        const mutation = `
+            mutation CreateProduct($input: ProductInput!) {
+                createProduct(input: $input) {
+                    productId
+                    productName
+                    images
+                }
             }
-            showToast(errMsg, 'error');
-        }
-    });
+        `;
+        const variables = {
+            input: {
+                productName: productName,
+                quantity: quantity,
+                unitPrice: unitPrice,
+                images: uploadedImage,
+                description: description,
+                discount: discount,
+                status: status,
+                categoryId: categoryId
+            }
+        };
+
+        executeGraphQL(mutation, variables).done(function (res) {
+            $('#btnSaveProduct').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Sản Phẩm');
+            if (res.data && res.data.createProduct) {
+                showToast('Thêm sản phẩm thành công!', 'success');
+                $('#productModal').modal('hide');
+                loadProductData(currentProdPage);
+            } else {
+                showToast('Lỗi thêm sản phẩm!', 'error');
+            }
+        }).fail(function () {
+            $('#btnSaveProduct').prop('disabled', false).html('<i class="fa-solid fa-floppy-disk me-1"></i> Lưu Sản Phẩm');
+            showToast('Lỗi GraphQL Mutation!', 'error');
+        });
+    }
 }
 
 function deleteProduct(id, name) {
     Swal.fire({
-        title: 'Xác nhận xóa?',
+        title: 'Xác nhận xóa (GraphQL)?',
         text: `Bạn có chắc chắn muốn xóa sản phẩm "${name}"?`,
         icon: 'warning',
         showCancelButton: true,
@@ -614,21 +923,21 @@ function deleteProduct(id, name) {
         cancelButtonText: 'Hủy bỏ'
     }).then((result) => {
         if (result.isConfirmed) {
-            $.ajax({
-                url: '/api/product/deleteProduct/' + id,
-                type: 'DELETE',
-                dataType: 'json',
-                success: function (res) {
-                    if (res.status) {
-                        showToast(res.message || 'Xóa sản phẩm thành công!', 'success');
-                        loadProductData(currentProdPage);
-                    } else {
-                        showToast(res.message || 'Xóa sản phẩm thất bại!', 'error');
-                    }
-                },
-                error: function () {
-                    showToast('Lỗi hệ thống khi xóa sản phẩm!', 'error');
+            const mutation = `
+                mutation DeleteProduct($id: ID!) {
+                    deleteProduct(id: $id)
                 }
+            `;
+
+            executeGraphQL(mutation, { id: id }).done(function (res) {
+                if (res.data && res.data.deleteProduct) {
+                    showToast('Xóa sản phẩm thành công!', 'success');
+                    loadProductData(currentProdPage);
+                } else {
+                    showToast('Xóa sản phẩm thất bại!', 'error');
+                }
+            }).fail(function () {
+                showToast('Lỗi hệ thống khi xóa sản phẩm!', 'error');
             });
         }
     });

@@ -98,6 +98,16 @@ public class ProductServiceImpl implements IProductService {
     }
 
     @Override
+    public List<Product> findByOrderByUnitPriceAsc() {
+        return productRepository.findByOrderByUnitPriceAsc();
+    }
+
+    @Override
+    public List<Product> findByCategoryId(Long categoryId) {
+        return productRepository.findByCategory_CategoryId(categoryId);
+    }
+
+    @Override
     public void deleteById(Long id) {
         productRepository.deleteById(id);
     }

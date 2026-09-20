@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Quản Lý RESTful API & AJAX - Category & Product</title>
+    <title>Hệ Thống Quản Lý GraphQL API & AJAX - Category & Product</title>
 
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -17,10 +17,15 @@
     <!-- Header Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
         <div class="container-fluid px-4">
-            <a class="navbar-brand" href="#"><i class="fa-solid fa-store me-2"></i> RESTful API & AJAX CRUD Manager</a>
+            <a class="navbar-brand" href="#"><i class="fa-solid fa-diagram-project me-2"></i> GraphQL API & Thymeleaf AJAX Manager</a>
             <span class="navbar-text text-white-50 small">
-                Spring Boot 3 + Spring Data JPA + AJAX Pagination
+                Spring Boot 3 + GraphQL + AJAX + Thymeleaf
             </span>
+            <div class="ms-auto">
+                <a href="/graphiql" target="_blank" class="btn btn-sm btn-light text-primary fw-bold">
+                    <i class="fa-solid fa-code me-1"></i> Mở GraphiQL Console
+                </a>
+            </div>
         </div>
     </nav>
 
@@ -32,26 +37,83 @@
         <!-- Navigation Tabs -->
         <ul class="nav nav-tabs mb-4" id="mainTab" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="category-tab" data-bs-toggle="tab" data-bs-target="#category-pane" type="button" role="tab" aria-controls="category-pane" aria-selected="true">
-                    <i class="fa-solid fa-list me-2"></i> Quản Lý Danh Mục (Category)
+                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home-pane" type="button" role="tab" aria-controls="home-pane" aria-selected="true">
+                    <i class="fa-solid fa-house me-2"></i> Trang Chủ (GraphQL Product View)
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="category-tab" data-bs-toggle="tab" data-bs-target="#category-pane" type="button" role="tab" aria-controls="category-pane" aria-selected="false">
+                    <i class="fa-solid fa-list me-2"></i> Quản Lý Danh Mục (GraphQL CRUD)
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="product-tab" data-bs-toggle="tab" data-bs-target="#product-pane" type="button" role="tab" aria-controls="product-pane" aria-selected="false">
-                    <i class="fa-solid fa-box me-2"></i> Quản Lý Sản Phẩm (Product)
+                    <i class="fa-solid fa-box me-2"></i> Quản Lý Sản Phẩm (GraphQL CRUD)
                 </button>
             </li>
         </ul>
 
         <div class="tab-content" id="mainTabContent">
 
-            <!-- TAB 1: CATEGORY MANAGEMENT -->
-            <div class="tab-pane fade show active" id="category-pane" role="tabpanel" aria-labelledby="category-tab">
-                <div class="card">
+            <!-- TAB 1: HOME PAGE - GRAPHQL PRODUCT VIEWS -->
+            <div class="tab-pane fade show active" id="home-pane" role="tabpanel" aria-labelledby="home-tab">
+                
+                <!-- Section 1: All Products Sorted by Price Low to High -->
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-arrow-down-short-wide text-primary fs-5"></i>
+                            <h5 class="mb-0">1. Tất Cả Sản Phẩm Có Giá Từ Thấp Đến Cao (GraphQL Query)</h5>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadHomeProductsSortedByPrice()">
+                            <i class="fa-solid fa-rotate me-1"></i> Làm mới
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="homePriceSortedContainer" class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+                            <div class="col-12 text-center py-4 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2"></div> Đang tải dữ liệu sản phẩm qua GraphQL...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Products by Category -->
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-filter text-success fs-5"></i>
+                            <h5 class="mb-0">2. Lấy Tất Cả Sản Phẩm Theo 01 Danh Mục (GraphQL Query)</h5>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="homeCategorySelect" class="form-label fw-bold">Chọn Danh Mục:</label>
+                                <select id="homeCategorySelect" class="form-select" onchange="onHomeCategoryChanged()">
+                                    <option value="">-- Chọn danh mục để xem sản phẩm --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="homeCategoryProductsContainer" class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+                            <div class="col-12 text-center py-4 text-muted">
+                                <i class="fa-solid fa-hand-pointer me-2"></i> Vui lòng chọn 1 danh mục ở trên để hiển thị sản phẩm.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <!-- TAB 2: CATEGORY MANAGEMENT (GRAPHQL CRUD & PAGINATION) -->
+            <div class="tab-pane fade" id="category-pane" role="tabpanel" aria-labelledby="category-tab">
+                <div class="card shadow-sm">
                     <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
                         <div class="d-flex align-items-center gap-2">
                             <i class="fa-solid fa-folder-tree text-primary fs-5"></i>
-                            <h5 class="mb-0">Danh Sách Danh Mục</h5>
+                            <h5 class="mb-0">3. Quản Lý Danh Mục (GraphQL Search, Paginated CRUD)</h5>
                         </div>
                         <button class="btn btn-success" onclick="openAddCategoryModal()">
                             <i class="fa-solid fa-plus me-1"></i> Thêm Danh Mục Mới
@@ -63,7 +125,7 @@
                             <div class="col-md-6">
                                 <div class="input-group">
                                     <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
-                                    <input type="text" id="catSearchName" class="form-control" placeholder="Tìm kiếm theo tên danh mục..." onkeyup="onCategorySearchKeyUp(event)">
+                                    <input type="text" id="catSearchName" class="form-control" placeholder="Tìm kiếm theo tên danh mục (GraphQL)..." onkeyup="onCategorySearchKeyUp(event)">
                                     <button class="btn btn-outline-secondary" type="button" onclick="loadCategoryData(0)">Tìm kiếm</button>
                                     <button class="btn btn-outline-danger" type="button" onclick="clearCategorySearch()"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
@@ -113,13 +175,13 @@
             </div>
 
 
-            <!-- TAB 2: PRODUCT MANAGEMENT -->
+            <!-- TAB 3: PRODUCT MANAGEMENT (GRAPHQL CRUD & PAGINATION) -->
             <div class="tab-pane fade" id="product-pane" role="tabpanel" aria-labelledby="product-tab">
-                <div class="card">
+                <div class="card shadow-sm">
                     <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
                         <div class="d-flex align-items-center gap-2">
                             <i class="fa-solid fa-boxes-stacked text-primary fs-5"></i>
-                            <h5 class="mb-0">Danh Sách Sản Phẩm</h5>
+                            <h5 class="mb-0">3. Quản Lý Sản Phẩm (GraphQL Search, Paginated CRUD)</h5>
                         </div>
                         <button class="btn btn-success" onclick="openAddProductModal()">
                             <i class="fa-solid fa-plus me-1"></i> Thêm Sản Phẩm Mới
@@ -131,7 +193,7 @@
                             <div class="col-md-5">
                                 <div class="input-group">
                                     <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
-                                    <input type="text" id="prodSearchName" class="form-control" placeholder="Tìm kiếm theo tên sản phẩm..." onkeyup="onProductSearchKeyUp(event)">
+                                    <input type="text" id="prodSearchName" class="form-control" placeholder="Tìm kiếm tên sản phẩm (GraphQL)..." onkeyup="onProductSearchKeyUp(event)">
                                     <button class="btn btn-outline-secondary" type="button" onclick="loadProductData(0)">Tìm kiếm</button>
                                 </div>
                             </div>

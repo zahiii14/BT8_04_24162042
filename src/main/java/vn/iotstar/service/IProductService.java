@@ -30,6 +30,10 @@ public interface IProductService {
 
     Page<Product> searchProducts(String name, Long categoryId, Pageable pageable);
 
+    List<Product> findByOrderByUnitPriceAsc();
+
+    List<Product> findByCategoryId(Long categoryId);
+
     void deleteById(Long id);
 
     void delete(Product entity);
